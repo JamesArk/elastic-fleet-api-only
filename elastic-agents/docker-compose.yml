@@ -3,7 +3,7 @@ version: "2.2"
 services:
   setup:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
-    container_name: ecp-elasticsearch-security-setup
+    container_name: elasticsearch-setup-container
     volumes:
       - ./certs:/usr/share/elasticsearch/config/certs:z
     user: "1000"
@@ -52,6 +52,7 @@ services:
       - xpack.security.transport.ssl.certificate_authorities=certs/ca.crt
       - xpack.security.transport.ssl.verification_mode=certificate
       - xpack.security.transport.ssl.client_authentication=optional
+    mem_limit: 2147483648 # ~ 2gb
     healthcheck:
       test:
         [
@@ -84,6 +85,7 @@ services:
       - SERVER_SSL_CERTIFICATE=config/certs/kibana.crt
       - SERVER_SSL_KEY=config/certs/kibana.key
       - SERVER_SSL_CERTIFICATEAUTHORITIES=config/certs/ca.crt
+    mem_limit: 2147483648 # ~ 2gb
     healthcheck:
       test:
         [

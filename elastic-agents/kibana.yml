@@ -1,12 +1,10 @@
-xpack.encryptedSavedObjects.encryptionKey: "thirty-two-or-more-random-characters"
+xpack.encryptedSavedObjects.encryptionKey: "random-string-above-32-or-more-characters"
 server.host: "0.0.0.0"
 xpack.fleet.packages:
   - name: fleet_server
     version: latest
   - name: system
     version: latest
-  # - name: elasticsearch
-  #   version: latest
 xpack.fleet.agentPolicies:
   - name: Fleet-Server-Policy
     id: fleet-server-policy
@@ -16,13 +14,3 @@ xpack.fleet.agentPolicies:
       - name: fleet_server-1
         package:
           name: fleet_server
-#   - name: Elasticsearch-policy
-#     id: elasticsearch-policy
-#     namespace: default
-#     monitoring_enabled:
-#       - logs
-#       - metrics
-#     package_policies:
-#       - name: system
-#         package:
-#           name: system

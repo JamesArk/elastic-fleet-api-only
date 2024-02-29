@@ -18,6 +18,8 @@ ELASTICSEARCH_POLICY_ID=elasticsearch-policy
 SYSTEM_PACKAGE_POLICY_VERSION="1.54.0"
 AGENT_POLICY_JSON=$(printf '{"id":"%s","name":"Elastic-policy","namespace":"default","monitoring_enabled":["logs","metrics"]}' "${ELASTICSEARCH_POLICY_ID}")
 PACKAGE_POLICY_JSON=$(printf '{"name":"elasticsearch_system_package","namespace":"default","policy_id":"%s", "package":{"name": "system", "version":"%s"}}' "${ELASTICSEARCH_POLICY_ID}" "${SYSTEM_PACKAGE_POLICY_VERSION}")
+FLEET_SERVER_HOSTS_JSON=$(printf '{"fleet_server_hosts": ["%s"]}' "https://${FLEET_SERVER_HOSTNAME}:${FLEET_SERVER_PORT}")
+DEFAULT_OUTPUT_JSON=$(printf '{"hosts": ["%s"], "config_yaml": "ssl.verification_mode: certificate\\nssl.certificate_authorities: [\\"%s\\"]"}' "https://${ELASTIC_HOSTNAME}:${ELASTIC_PORT}" "$(pwd)/ca/ca.crt")
 
 echo "Checking if policy already exists..."
 elasticsearch_policy=$(curl -k -s -u "${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}" \
@@ -38,16 +40,16 @@ if [[ "$elasticsearch_policy" == "404" ]]; then
     -d @- | jq
 fi
 
-curl -k -s -u "${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}" \
+printf '%s' "${FLEET_SERVER_HOSTS_JSON}" | curl -k -s -u "${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}" \
     -XPUT "${HEADERS[@]}" \
     "${KIBANA_URL}/api/fleet/settings" \
-    -d "$(printf '{"fleet_server_hosts": ["%s"]}' "https://${FLEET_SERVER_HOSTNAME}:${FLEET_SERVER_PORT}")" | jq
+    -d @- | jq
 
 
-curl -k --silent --user "${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}" \
+printf '%s' "${DEFAULT_OUTPUT_JSON}" | curl -k -s -u "${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}" \
     -XPUT "${HEADERS[@]}" \
     "${KIBANA_URL}/api/fleet/outputs/fleet-default-output" \
-    -d "$(printf '{"hosts": ["%s"], "config_yaml": "ssl.verification_mode: certificate\\nssl.certificate_authorities: [\\"%s\\"]"}' "https://${ELASTIC_HOSTNAME}:${ELASTIC_PORT}" "$(pwd)/ca/ca.crt")" | jq
+    -d @- | jq
 
 ENROLLMENT_TOKEN=$(curl -k -s \
   -u ${ELASTIC_USERNAME}:${ELASTIC_PASSWORD} \
