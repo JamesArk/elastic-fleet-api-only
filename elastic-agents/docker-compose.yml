@@ -16,7 +16,7 @@ services:
         echo "All done!";
       '
     healthcheck:
-      test: ["CMD-SHELL", "[ -f config/certs/elastic.crt ]"]
+      test: ["CMD-SHELL", "[ -f config/certs/ca.crt ]"]
       interval: 1s
       timeout: 5s
       retries: 120

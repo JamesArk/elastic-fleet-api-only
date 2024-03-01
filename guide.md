@@ -1,22 +1,30 @@
-# Fleet Managed Elastic Agents: A pratical guide
+# UI-less Fleet Managed Elastic Agents: A guide
 
-A pratical guide to setup fleet server and fleet managed elastic agents without using Kibana UI.
+A guide on how to setup fleet server and fleet managed elastic agents in Elasticsearch without using the Kibana UI.
 
 ## Why make this guide?
 
-Although Elasticsearch provides good documentation on how to set up your own [fleet server](https://www.elastic.co/guide/en/fleet/8.12/add-fleet-server-on-prem.html) and [fleet managed elastic agents](https://www.elastic.co/guide/en/fleet/8.12/install-fleet-managed-elastic-agent.html), there are a few flaws:
+Elasticsearch provides great documentation on how to set up your own [fleet server](https://www.elastic.co/guide/en/fleet/8.12/add-fleet-server-on-prem.html) and [fleet managed elastic agents](https://www.elastic.co/guide/en/fleet/8.12/install-fleet-managed-elastic-agent.html), but there are a few caveats:
 
-- **Relies on the Kibana UI**: When we want to experiment with clean state elasticsearch deployment or we just want to automate things to remove human error, using the UI should be avoided as much as you can.
-- **Running the fleet server on the host**: Elastic-agents should be installed at the host level in order to get the most accurate metrics of the host and applications running on the host. However, when it comes to the fleet server, we might not want to monitor the host the fleet-server is running on. Maybe we want to run a containerized fleet-server that manages host installed elastic agents. The kibana UI assumes you will install the fleet server at the host level, which may or may not be possible or wanted. We may just want a container running the fleet server on any host we feel like without interfering with the already installed elastic agent if there is any.
-- **Unclear setup for containerized fleet server**: By following this [guide](https://www.elastic.co/guide/en/fleet/8.12/elastic-agent-container.html), we do get a nice step by step guide on how to run elastic-agents in containers, specially fleet-servers. The catch is ... it requires using Kibana's Fleet UI. Which we would like to avoid as much as possible.
+- **Reliance on the Kibana UI**: When we want to experiment with Elasticsearch deployment and keep erasing its data for a clean state or we just want to automate things to remove human error, using the UI should be avoided as much as you can. However, Elastic documentation on fleet servers and fleet managed Elastic Agents tend to rely on the Kibana UI for a few, and sometimes several, steps.
+- **Assumption of the Fleet Server collecting metrics and logs**: Elastic Agents should be installed at the host level in order to get the most accurate metrics of the host and applications running on the host. However, when it comes to the fleet server, we might not want to monitor the host the fleet-server is running on. Maybe we want to run a containerized fleet-server that manages host installed Elastic Agents. The kibana UI assumes you will install the fleet server at the host level, which may or may not be possible or desirable. We might need to monitor the host the fleet server is running, either because its not as important as the other hosts (Like a Frontend hosts that hosts frontend applications and services like Kibana).
+- **Unclear complete setup for containerized fleet server and Elastic Agents**: In the Elastic Documentation guide on elastic agents in a [container](https://www.elastic.co/guide/en/fleet/8.12/elastic-agent-container.html), we get a nice step by step guide on how to run elastic-agents in containers, specially fleet-servers. The catch is ... it uses Kibana's Fleet UI. It assumes you would like to create an agent policy and Elastic Agent integration through the kibana UI. And as stated before, sometimes we would like to avoid the reliance on the Kibana UI, so that we can automate enrollment of Elastic Agents or creation of new Agent Policies and Elastic Agent integrations.
 
-I'd like to note that Elasticsearch does have documentation on the [fleet REST API](https://www.elastic.co/guide/en/fleet/8.12/fleet-api-docs.html) that does give us enough tools to set up our own fleet server and fleet managed elastic agents. The problem lies in the lack of a streamlined step by step guide on setting up a fleet server and fleet managed elastic agents using **ONLY** the provided fleet REST APIs and not relying on the Kibana UI in any of the steps.
+Please note that Elasticsearch has documentation on the [Fleet REST API](https://www.elastic.co/guide/en/fleet/8.12/fleet-api-docs.html), that gives us enough tools to set up our own Fleet Server and fleet managed elastic agents and as well as everything the Kibana UI can do with Fleet. The problem lies in the lack of a streamlined step by step guide on setting up a Fleet Server and fleet managed elastic agents using **ONLY** the provided Fleet REST APIs and not relying on the Kibana UI in **ANY** of the steps.
 
-## Self Signed CA and certificates
+### First What we need
+In order to have our own Fleet Server and fleet managed Elastic Agents, we need to have:
+- An Elasticsearch Cluster
+- Kibana (to verify the Fleet Server and Elastic Agents are enrolled)
+- Certificates and keys for all services (Elasticsearch, Kibana and Fleet Server)
 
-Elasticsearch has a nice tool for creating self signed CA's and other certificates that work well on Elastic products. To configure SSL/TLS using this tool, you can check out their guide [here](https://www.elastic.co/guide/en/fleet/8.12/secure-connections.html), but in this guide I will be creating our own CA using [openssl](https://www.openssl.org/) and using the Elasticsearch tools for the other certificates and keys.
+First, let's create our own self signed CA to create the certificates and keys so that the services that will be using in this guide can authenticate themselves.
 
-The following command will create our own CA certificate and key with an expiration of 10 years:
+### Self Signed CA and certificates
+
+Elasticsearch has a nice tool for creating self signed CA's and other certificates that work well on Elastic products. To configure SSL/TLS using this tool, you can check out their [guide](https://www.elastic.co/guide/en/fleet/8.12/secure-connections.html), but in this guide we will be creating our own CA, certificates and certificate keys using [openssl](https://www.openssl.org/).
+
+Let's start by creating our own CA certificate and key with an expiration of 10 years:
 
 ```bash
 mkdir ca && \
@@ -28,13 +36,17 @@ openssl req -x509 \
 -noenc -subj "/C=PT/ST=Lisbon/L=Lisbon/O=Marionete/OU=IT/CN=marionete"
 ```
 
-Once the CA is created, we can now create certificates and keys for all other services:
+Now that we have our own self signed CA, we can create our own certificates and keys. In this guide, we will need the following services: Elasticsearch, Kibana and a Fleet Server.
+
+Each service will have a pair of key and certificate of their own to authenticate with the other services.
+
+In the next few steps, ```service``` can take the following values: ```elastic```,```kibana``` and ```fleet-server```.
 
 - Include the CA certificate we just created:
 ```bash
 mkdir certs && cp ca/ca.crt certs
 ```
-- Generate the key with password
+- Generate the key
 ```bash
 openssl genrsa -out certs/<service>.key 2048
 ```
@@ -55,10 +67,8 @@ openssl x509 -req \
   -extfile <(printf "subjectAltName=DNS:<service>,DNS:localhost\nextendedKeyUsage=serverAuth,clientAuth\nkeyUsage=digitalSignature,keyEncipherment,keyAgreement\nsubjectKeyIdentifier=hash")
 ```
 
-Where ```<service>``` are can either be ```elastic```, ```kibana``` or ```fleet-server```.
-## Setting up Elastic, Kibana and Fleet Server without the UI
-In order to have fleet servers and fleet managed elastic agents, we need our own elasticsearch and kibana.
-
+Once we have our certificates and keys for all services, we will deploy them using docker compose.
+## Deploying Elastic, Kibana and a Fleet Server
 We can deploy kibana, a single elasticsearch node and a single fleet server using the following ```docker-compose.yml```:
 ```yaml
 version: "2.2"
@@ -79,7 +89,7 @@ services:
         echo "All done!";
       '
     healthcheck:
-      test: ["CMD-SHELL", "[ -f config/certs/elastic.crt ]"]
+      test: ["CMD-SHELL", "[ -f config/certs/ca.crt ]"]
       interval: 1s
       timeout: 5s
       retries: 120
@@ -115,7 +125,7 @@ services:
       - xpack.security.transport.ssl.certificate_authorities=certs/ca.crt
       - xpack.security.transport.ssl.verification_mode=certificate
       - xpack.security.transport.ssl.client_authentication=optional
-    mem_limit: 1073741824 # ~ 1gb
+    mem_limit: 2147483648 # ~ 2gb
     healthcheck:
       test:
         [
@@ -148,7 +158,7 @@ services:
       - SERVER_SSL_CERTIFICATE=config/certs/kibana.crt
       - SERVER_SSL_KEY=config/certs/kibana.key
       - SERVER_SSL_CERTIFICATEAUTHORITIES=config/certs/ca.crt
-    mem_limit: 1073741824 # ~ 1gb
+    mem_limit: 2147483648 # ~ 2gb
     healthcheck:
       test:
         [
@@ -189,11 +199,9 @@ services:
         - FLEET_SERVER_ELASTICSEARCH_CA=/certs/ca.crt
         - KIBANA_FLEET_CA=/certs/ca.crt
 ```
-This docker compose file will deploy a single node elasticsearch cluster, set up and deploy kibana and a fleet server.
+This docker compose file will deploy a single node elasticsearch cluster, set up and deploy kibana and deploy a fleet server.(Don't forget to create ```elastic-data``` and ```kibana-data``` directories for the volumes)
 
-You can check if the fleet server is enrolled and up in the Kibana UI (here)[https://localhost:5601/app/fleet].
-
-The ```kibana.yml``` should contain at least the following content:
+The ```kibana.yml``` file should contain at least the following content:
 
 ```yaml
 xpack.encryptedSavedObjects.encryptionKey: "random-string-above-32-or-more-characters"
@@ -213,12 +221,9 @@ xpack.fleet.agentPolicies:
         package:
           name: fleet_server
 ```
-
-Once you have the docker compose file and ```kibana.yml```, we can now see the step by step way to set up and start an fleet managed elastic agent.
-## Fleet Managed Elastic Agent Without the UI
-
-After deploying the fleet server, to deploy an Elastic Agent that is managed by Fleet we need to:
-
+Once the services are deployed, we can set up Fleet Settings and enroll fleet managed Elastic Agents.
+## Fleet Managed Elastic Agents Without the UI
+To deploy an Elastic Agent that is managed by Fleet we need to:
 - Create an agent policy for the elastic agent to enroll into.
 - Add an Elastic Agent integration to our agent policy.
 - Setup the Default output and fleet server hosts.
@@ -226,7 +231,7 @@ After deploying the fleet server, to deploy an Elastic Agent that is managed by 
 
 All of these steps are documented by Elastic using the UI but we will be using REST API calls with [curl](https://curl.se/) and [jq](https://jqlang.github.io/jq/) commands instead.
 
-First, create a new agent policy. And according to [Elastic docs](https://www.elastic.co/guide/en/fleet/8.12/create-a-policy-no-ui.html), this part is rather straight forward. With the following command, we create a new agent policy named "Elastic-policy" with a custom id (this will come in handy in the next few steps.)
+Let's start with creating a new agent policy. According to [Elastic documentation](https://www.elastic.co/guide/en/fleet/8.12/create-a-policy-no-ui.html), this step is rather straight forward. With the following command, we create a new agent policy named "Elastic-policy" with a custom id (this will come in handy in the next few steps).
 
 ```bash
 curl -k -s -u "elastic:elastic" \
@@ -241,7 +246,6 @@ curl -k -s -u "elastic:elastic" \
     "https://localhost:5601/api/fleet/package_policies" \
     -d '{"name":"Elastic-System-package","namespace":"default","policy_id":"elastic-policy", "package":{"name": "system", "version":"1.54.0"}}'
 ```
-
 Next, we add a default Fleet Server host:
 ```bash
 curl -k -s -u "elastic:elastic" \
@@ -249,23 +253,24 @@ curl -k -s -u "elastic:elastic" \
     "https://localhost:5601/api/fleet/settings" \
     -d '{"fleet_server_hosts": ["https://localhost:8220"]}'
 ```
-To make all Elastic Agents send to our Elasticsearch cluster, we can define the default output for fleet with the following command:
-
+To make all Elastic Agents send to our Elasticsearch cluster, we need to define the default output for fleet with the following command:
 ```bash
 curl -k -s -u "elastic:elastic" \
     -XPUT -H "kbn-xsrf: kibana" -H "Content-type: application/json" \
     "https://localhost:5601/api/fleet/outputs/fleet-default-output" \
-    -d '{"hosts": ["https://localhost:9200"], "config_yaml": "ssl.verification_mode: certificate\\nssl.certificate_authorities: [\\"/path/to/ca/ca.crt\\"]"}'
+    -d '{"hosts": ["https://localhost:9200"], "config_yaml": "ssl.verification_mode: certificate\nssl.certificate_authorities: [\"/path/to/ca/ca.crt\"]"}'
 ```
-Note that ```/path/to/ca/ca.crt``` will be the same for all Elastic Agents, make sure the CA certificate has the same path on all machines that have an Elastic Agent installed.
+Note that ```/path/to/ca/ca.crt``` will be the same for all Elastic Agents, so make sure the CA certificate has the same path on all machines that have an Elastic Agent installed.
 
-And finally, we download the Elastic Agent, obtain the enrollment token for the our agent policy and install an Elastic Agent on the host machine:
-
+Next, we download the appropriate Elastic Agent binary version for our host machine (in this case linux with x86_64 architecture) and unarchive it.
 ```bash
 wget https://artifacts.elastic.co/downloads/beats/elastic-agent/elastic-agent-8.12.2-linux-x86_64.tar.gz
 
 tar xvzf elastic-agent-8.12.2-linux-x86_64.tar.gz 
+```
 
+And finally, we get our agent policy enrollment token and use it when installing the Elastic Agent in our host machine.
+```bash
 ENROLLMENT_TOKEN=$(curl -k -s \
   -u elastic:elastic \
   https://localhost:5601/api/fleet/enrollment_api_keys | \
@@ -275,6 +280,10 @@ sudo ./elastic-agent-8.12.2-linux-x86_64/elastic-agent install \
     --base-path=/path/to/install/dir \
     --url=https://localhost:8220 \
     --enrollment-token=${ENROLLMENT_TOKEN} \
-    --certificate-authorities=/path/to/ca/ca.crt \
+    --certificate-authorities=/home/tiagoguerreiro/elastic-agents-testing/ca/ca.crt \
     --force
 ```
+Once the installation is complete, you should see a new Elastic Agent appear in the [fleet page](https://localhost:5601/app/fleet) and system metrics about the host machine in this [dashboard](https://localhost:5601/app/dashboards#/view/system-Metrics-system-overview).
+
+# Summary
+Although the documentation on this particular topic is quite scattered, the Elastic docs are an extremely useful resource and should always be used when developing with Elastic's products. Setting up a fleet server and fleet managed elastic agents is quite easy with the UI and the REST API way is just as easy if not easier, it just needed to be a more proper guide for developers who can't or don't want to always rely on Kibana to set up any fleet server or elastic agents. Fleet's REST API is quite well documented and I encourage you to explore it to figure out your exact needs when it comes to fleet managed elastic agents.

@@ -14,17 +14,17 @@ ELASTIC_HOSTNAME=localhost
 ELASTIC_PORT=9200
 FLEET_SERVER_HOSTNAME=localhost
 FLEET_SERVER_PORT=8220
-ELASTICSEARCH_POLICY_ID=elasticsearch-policy
+ELASTIC_POLICY_ID=elastic-policy
 SYSTEM_PACKAGE_POLICY_VERSION="1.54.0"
-AGENT_POLICY_JSON=$(printf '{"id":"%s","name":"Elastic-policy","namespace":"default","monitoring_enabled":["logs","metrics"]}' "${ELASTICSEARCH_POLICY_ID}")
-PACKAGE_POLICY_JSON=$(printf '{"name":"elasticsearch_system_package","namespace":"default","policy_id":"%s", "package":{"name": "system", "version":"%s"}}' "${ELASTICSEARCH_POLICY_ID}" "${SYSTEM_PACKAGE_POLICY_VERSION}")
+AGENT_POLICY_JSON=$(printf '{"id":"%s","name":"Elastic-policy","namespace":"default","monitoring_enabled":["logs","metrics"]}' "${ELASTIC_POLICY_ID}")
+PACKAGE_POLICY_JSON=$(printf '{"name":"Elastic-System-package","namespace":"default","policy_id":"%s", "package":{"name": "system", "version":"%s"}}' "${ELASTIC_POLICY_ID}" "${SYSTEM_PACKAGE_POLICY_VERSION}")
 FLEET_SERVER_HOSTS_JSON=$(printf '{"fleet_server_hosts": ["%s"]}' "https://${FLEET_SERVER_HOSTNAME}:${FLEET_SERVER_PORT}")
 DEFAULT_OUTPUT_JSON=$(printf '{"hosts": ["%s"], "config_yaml": "ssl.verification_mode: certificate\\nssl.certificate_authorities: [\\"%s\\"]"}' "https://${ELASTIC_HOSTNAME}:${ELASTIC_PORT}" "$(pwd)/ca/ca.crt")
 
 echo "Checking if policy already exists..."
 elasticsearch_policy=$(curl -k -s -u "${ELASTIC_USERNAME}:${ELASTIC_PASSWORD}" \
     -XGET -H "kbn-xsrf: kibana" \
-    "${KIBANA_URL}/api/fleet/agent_policies/${ELASTICSEARCH_POLICY_ID}" | jq '.statusCode')
+    "${KIBANA_URL}/api/fleet/agent_policies/${ELASTIC_POLICY_ID}" | jq '.statusCode')
 
 if [[ "$elasticsearch_policy" == "404" ]]; then
   echo "Creating Basic agent policy..."
