@@ -1,26 +1,26 @@
 # UI-less Fleet Managed Elastic Agents: A guide
 
-A guide on how to setup Fleet Server and Fleet managed elastic agents in Elasticsearch using only REST API calls, avoiding Kibana UI.
+A guide on how to setup Fleet Server and Fleet managed elastic agents in Elasticsearch using **only** REST API calls, avoiding Kibana UI.
 
 ## What are Fleet managed Elastic Agents?
-Elastic Agents are a software that runs on a host machine that collects logs, metrics and other data from services running on the same host. 
+Elastic Agents are software that collects logs, metrics and other data from services running on the same host machine. 
 
-Fleet managed Elastic Agents are a centrally managed in the Kibana UI, where you can create/update  Agent Policies, upgrade Elastic Agents, check the current health status of your Elastic Agents and add/update Elastic Agent integrations for app specific behaviour when collecting of logs and metrics. 
+These agents can also be centrally managed by Fleet in the Kibana UI, where you can create/update  Agent Policies, upgrade agent versions, check the current health status of your fleet and add/update Elastic Agent Integrations for app specific behaviour when collecting of logs and metrics. 
 
-Elastic Agents also need to communicate through Fleet Servers, the service responsible for spreading the changes we apply through the Kibana UI to all relevant Elastic Agents. It is also responsible for spreading new changes to enrollment and unenrollment of Elastic Agents.
+They also need to communicate through a Fleet Server, the service responsible for rolling out the changes that we apply through the Kibana UI to all relevant agents. It is also responsible for monitoring and reporting new enrollments and unenrollments.
 
 ## Why make this guide?
 
-Elasticsearch provides great documentation on how to set up your own [fleet server](https://www.elastic.co/guide/en/fleet/8.12/add-fleet-server-on-prem.html) and [fleet managed elastic agents](https://www.elastic.co/guide/en/fleet/8.12/install-fleet-managed-elastic-agent.html), but there are a few caveats:
+Elasticsearch provides great documentation on how to set up your own [Fleet Server](https://www.elastic.co/guide/en/fleet/8.12/add-fleet-server-on-prem.html) and [Fleet managed Elastic Agents](https://www.elastic.co/guide/en/fleet/8.12/install-fleet-managed-elastic-agent.html), but there are a few caveats:
 
-- **Reliance on the Kibana UI**: When we want to experiment with Elasticsearch deployment and keep erasing its data for a clean state or we just want to automate things to remove human error, using the UI should be avoided as much as you can.
-- **Monitoring the host machine with the Fleet Server**: Elastic Agents should be installed at the host level in order to get the most accurate metrics of the host and applications running on the host. However, we might not want to monitor the host the fleet-server is running on. The Kibana UI assumes you will install the fleet server at the host level, which may or may not be possible or desirable. It might be less important or relevant for us to monitor the host machine the fleet server is running on, maybe because it is not as important as the other hosts (Like a "frontend" host machine that hosts frontend/UI applications and services like Kibana).
+- **Reliance on the Kibana UI**: When we want to experiment with Elasticsearch deployment and keep erasing its data for a clean state or we just want to automate things to remove human error, using the UI should be avoided as much as you can. If we use the UI to setup Fleet and Elastic Agents, we may add Elastic Agent Integrations to the wrong policies or provide the wrong configuration to those Integrations, making it harder to troubleshoot Elastic Agents when metrics or logs don't show up as expected in the Kibana UI.
+- **Monitoring the host machine with the Fleet Server**: Elastic Agents should be installed at the host level in order to get the most accurate metrics and applications running on the host machine. However, we might not want to monitor the host where the fleet-server is running on. The Kibana UI assumes that you will install the fleet server at the host level, which may or may not be possible or desirable. It might be less important or relevant for us to monitor the host machine the fleet server is running on, maybe because it is not as important as the other hosts (Like a "frontend" host machine that hosts frontend/UI applications and services like Kibana).
 - 
-- **Unclear complete setup for containerized Fleet Server and Elastic Agents**: In the Elastic Documentation guide on elastic agents in a [container](https://www.elastic.co/guide/en/fleet/8.12/elastic-agent-container.html), we get a nice step by step guide on how to run elastic-agents in containers. The catch is ... it uses Kibana's Fleet UI. It assumes you would like to create an agent policy and Elastic Agent integration through the kibana UI. And as stated before, sometimes we would like to avoid the Kibana UI, so that we can automate enrollment of Elastic Agents, the creation of new Agent Policies and the addition or editing of Elastic Agent integrations.
+- **Unclear complete setup for containerized Fleet Server and Elastic Agents**: In the Elastic Documentation guide on [Elastic Agents in a container](https://www.elastic.co/guide/en/fleet/8.12/elastic-agent-container.html), we get a nice step by step guide on how to run elastic-agents in containers. The catch is … it uses Kibana's Fleet UI. It assumes you would like to create an agent policy and Elastic Agent integration through Kibana. And as stated before, sometimes we would like to avoid it, so that we can automate enrollment of Elastic Agents, the creation of new Agent Policies and the addition or editing of Elastic Agent integrations.
 
-Please note that Elasticsearch has documentation on the [Fleet REST API](https://www.elastic.co/guide/en/fleet/8.12/fleet-api-docs.html), that gives us enough tools to set up our own Fleet Server and Fleet managed Elastic Agents and as well as everything the Kibana UI can do with Fleet. There is also a declarative way to add Agent policies through the kibana.yml [here](https://www.elastic.co/guide/en/fleet/8.12/create-a-policy-no-ui.html#use-preconfiguration-to-create-policy), however, in my experience, updating the agent policies in already set up Elasticsearch Cluster and Kibana was a bit "flacky".
+Please note that Elasticsearch has documentation on the [Fleet REST API](https://www.elastic.co/guide/en/fleet/8.12/fleet-api-docs.html), that gives us enough tools to set up our own Fleet Server and Fleet managed Elastic Agents as well as everything the Kibana UI can do with Fleet. There is also a declarative way to add Agent policies through the kibana.yml [here](https://www.elastic.co/guide/en/fleet/8.12/create-a-policy-no-ui.html#use-preconfiguration-to-create-policy), however, from my experience, updating the agent policies in already set up Elasticsearch Cluster and Kibana was a bit "flacky".
 
-The problem lies in the lack of a streamlined step by step guide on setting up a Fleet Server and fleet managed elastic agents using **ONLY** the provided Fleet REST APIs and not relying on the Kibana UI in **ANY** of the steps.
+The problem lies in the lack of a streamlined step by step guide on setting up a Fleet Server and Fleet managed Elastic Agents using **ONLY** the provided Fleet REST APIs and not relying on the Kibana UI in **ANY** of the steps.
 
 With the "why" out of the way, let's get started with what is necessary to have a Fleet Server and Fleet managed Elastic Agents.
 ### What we need
@@ -29,11 +29,11 @@ In order to have our own Fleet Server and Fleet managed Elastic Agents, we need 
 - A Kibana instance
 - Certificates and keys for all services (Elasticsearch, Kibana and Fleet Server)
 
-First, let's create our own self signed CA to create the certificates and keys so that the services that will be using in this guide can authenticate themselves.
+First, let's create our own self signed CA to create the certificates and keys so that the services that we will be using in this guide can authenticate themselves.
 
 ### Self Signed CA and certificates
 
-Elasticsearch has a nice tool for creating self signed CA's and other certificates that work well on Elastic products. To configure SSL/TLS using this tool, you can check out their [guide](https://www.elastic.co/guide/en/fleet/8.12/secure-connections.html), but in this guide we will be creating our own CA, certificates and certificate keys using [openssl](https://www.openssl.org/).
+Elasticsearch has a nice tool for creating self signed CA's and other certificates that work well on Elastic products. To configure SSL/TLS using this tool, you can check out their [guide](https://www.elastic.co/guide/en/fleet/8.12/secure-connections.html), but in this one we will be creating our own CA, certificates and certificate keys using [openssl](https://www.openssl.org/).
 
 Let's start by creating our own CA certificate and key with an expiration of 10 years:
 
@@ -53,7 +53,7 @@ In this guide, we will need the following services: Elasticsearch, Kibana and a 
 
 In the next few steps, ```<service>``` can take the following values: ```elastic```,```kibana``` and ```fleet-server```.
 
-- Include the CA certificate we just created in all services:
+- Include the CA certificate which we just created in all services:
 ```bash
 mkdir certs && cp ca/ca.crt certs
 ```
@@ -299,4 +299,4 @@ Note that "/path/to/install/dir" is where the Elastic Agent will store its logs 
 Once the installation is complete, you should see a new Elastic Agent appear in the [fleet page](https://localhost:5601/app/fleet) and system metrics about the host machine in this [dashboard](https://localhost:5601/app/dashboards#/view/system-Metrics-system-overview).
 
 # Summary
-Elastic's documentation is an extremely useful resource and should always be used when developing with Elastic's products. Setting up a Fleet Server and Fleet managed elastic agents is quite simple with the Kibana UI and without the Kibana UI, we can use the REST API that is just as easy if not easier. The lack of a straightforward guide using only the Fleet REST API was the problem and I hope this guide has helped to minimize the problem. There are developers who can't or don't desire to always rely on Kibana to set up any Fleet Server or Fleet managed Elastic Agents. Fleet's REST API is well documented and I highly urge you to explore it to figure out your exact needs when it comes to your Fleet Server and Fleet managed Elastic Agents.
+Elastic's documentation is an extremely useful resource and should always be used when developing with Elastic's products. Setting up a Fleet Server and Fleet managed Elastic Agents is quite simple with and without the Kibana UI, we can use the REST API that is just as easy if not easier. The lack of a straightforward guide using only the Fleet REST API was the problem and I hope this guide has helped to minimize the problem. There are developers who can't or don't desire to always rely on Kibana to set up any Fleet Server or Fleet managed Elastic Agents. Fleet's REST API is well documented and I highly urge you to explore it to figure out your exact needs when it comes to your Fleet Server and Fleet managed Elastic Agents.
